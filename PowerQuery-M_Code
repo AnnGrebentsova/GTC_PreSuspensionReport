@@ -1,0 +1,23 @@
+let
+    Source = Excel.Workbook(File.Contents("INSERT_YOUR_FILEPATH_HERE"), null, true),
+    #"Pre-Suspension Detail_Sheet" = Source{[Item="Pre-Suspension Detail",Kind="Sheet"]}[Data],
+    Column1 = #"Pre-Suspension Detail_Sheet"{3}[Column1],
+    ReportDate = Text.Range(Column1, 19, 10),
+    #"Back to Navigation Step" = #"Pre-Suspension Detail_Sheet",
+    #"Removed Blank Rows" = Table.SelectRows(#"Back to Navigation Step", each not List.IsEmpty(List.RemoveMatchingItems(Record.FieldValues(_), {"", null}))),
+    #"Removed Top 3 Rows" = Table.Skip(#"Removed Blank Rows",3),
+    #"Promoted Headers" = Table.PromoteHeaders(#"Removed Top 3 Rows", [PromoteAllScalars=true]),
+    #"Filled Down Hierarchy Name Lvl 5" = Table.FillDown(#"Promoted Headers",{"Hierarchy Name (Level 5)"}),
+    #"Filtered Rows" = Table.SelectRows(#"Filled Down Hierarchy Name Lvl 5", each ([#"Hierarchy Name (Level 5)"] = "301 FW - CARSWELL AFB")),
+    #"Filled Down Hierarchy Name Lvl 6" = Table.FillDown(#"Filtered Rows",{"Hierarchy Name (Level 6)", "Hierarchy Name (Level 7)"}),
+    #"Removed Other Columns" = Table.SelectColumns(#"Filled Down Hierarchy Name Lvl 6",{"Hierarchy Name (Level 6)", "Hierarchy Name (Level 7)", "Account Number", "Account Name (Short)", "Account Open/Close", "Account Status Description", "Number Days Past Due", "Last Payment Due Date", "Past Due Amount", "Last Statement Balance"}),
+    #"Added Conditional Group Column" = Table.AddColumn(#"Removed Other Columns", "Group", each if [#"Hierarchy Name (Level 6)"] = "301 FW" then "WSA" else if [#"Hierarchy Name (Level 6)"] = "301 MXG" then "MXG" else if [#"Hierarchy Name (Level 6)"] = "301 MSG" then "MSG" else if [#"Hierarchy Name (Level 6)"] = "10 AF STAFF" then "10 AF" else null, type text),
+    #"Added Conditional Unit Column" = Table.AddColumn(#"Added Conditional Group Column", "Unit", each if [#"Hierarchy Name (Level 7)"] = "301 MDS" then "MDS" else if [#"Hierarchy Name (Level 7)"] = "" then "Fix Data" else if [#"Hierarchy Name (Level 7)"] = "301 MXS" then "MXS" else if [#"Hierarchy Name (Level 7)"] = "301 LRS" then "LRS" else if [#"Hierarchy Name (Level 7)"] = "301 CES" then "CES" else if [#"Hierarchy Name (Level 7)"] = "301 SFS" then "SFS" else if [#"Hierarchy Name (Level 7)"] = "301 FSS" then "FSS" else [#"Hierarchy Name (Level 7)"], type text),
+    #"Removed Columns" = Table.RemoveColumns(#"Added Conditional Unit Column",{"Hierarchy Name (Level 6)", "Hierarchy Name (Level 7)", "Number Days Past Due"}),
+    #"Reordered Columns" = Table.ReorderColumns(#"Removed Columns",{"Group", "Unit", "Account Number", "Account Name (Short)", "Account Open/Close", "Account Status Description", "Last Payment Due Date", "Past Due Amount", "Last Statement Balance"}),
+    #"Capitalized Each Word" = Table.TransformColumns(#"Reordered Columns",{{"Account Name (Short)", Text.Proper, type text}, {"Account Status Description", Text.Proper, type text}}),
+    #"Renamed Columns" = Table.RenameColumns(#"Capitalized Each Word",{{"Account Number", "Account #"}, {"Account Name (Short)", "Name"}, {"Account Open/Close", "Open/Close"}, {"Account Status Description", "Status"}, {"Last Statement Balance", "Last Stmt Balance"}, {"Last Payment Due Date", "Payment Due Date"}}),
+    #"Added Refresh Date Column" = Table.AddColumn(#"Renamed Columns", "Last Refreshed Date", each Text.Start(ReportDate,10)),
+    #"Changed Type" = Table.TransformColumnTypes(#"Added Refresh Date Column",{{"Account #", type text}, {"Open/Close", type text}, {"Payment Due Date", type date}, {"Past Due Amount", Currency.Type}, {"Last Stmt Balance", Currency.Type}, {"Last Refreshed Date", type date}})
+in
+    #"Changed Type"
